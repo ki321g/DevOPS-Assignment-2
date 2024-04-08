@@ -330,7 +330,7 @@ module "auto_scaling_group" {
     enable_monitoring = true
     
     create_iam_instance_profile = false
-    iam_instance_profile_arn    = local.roles.instance_profile_arn
+    iam_instance_profile_arn    = local.iam_roles.instance_profile_arn
 
     # Tags
     tags = merge(
@@ -562,6 +562,6 @@ resource "aws_iam_server_certificate" "cert" {
 # * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment
 # ***/
 # resource "aws_iam_role_policy_attachment" "attach_policy" {
-#   role       = local.roles.role_arn
+#   role       = local.iam_roles.role_arn
 #   policy_arn = aws_iam_policy.policy.arn
 # }

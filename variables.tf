@@ -18,7 +18,7 @@ locals {
       sed -i "15i <strong>InstanceID =</strong> $INSTANCE_ID\n<br><strong>AWS_REGION =</strong> $AWS_REGION\n<br><strong>AVAILABILITY_ZONE =</strong> $AVAILABILITY_ZONE " /home/ec2-user/Rugby-Club-POI/src/views/about-view.hbs
       EOF
   
-  roles = {
+  iam_roles = {
     role_arn             = "arn:aws:iam::650210063090:role/LabRole"
     instance_profile_arn = "arn:aws:iam::650210063090:instance-profile/LabInstanceProfile"
   }
