@@ -83,10 +83,10 @@ module "http_security_group" {
     source = "terraform-aws-modules/security-group/aws"
 
     name                = "${local.prefix}-http"
-    description         = "Allow all HTTP ingress"
+    description         = "Allow all HTTP and HTTPS ingress"
     vpc_id              = module.vpc.vpc_id
     ingress_cidr_blocks = ["0.0.0.0/0"]
-    ingress_rules       = ["http-80-tcp"]
+    ingress_rules       = ["http-80-tcp", "https-443-tcp"]
 
     tags = merge(
     var.default_tags,
@@ -153,8 +153,8 @@ module "ssh_bastion_security_group" {
 module "key_pair" {
     source = "terraform-aws-modules/key-pair/aws"
 
-    key_name           = "${local.prefix}-Key-Pair"    
-    # public_key = trimspace(tls_private_key.this.public_key_openssh)
+    key_name           = "${local.prefix}-Key-Pair"
+    
     create_private_key = true
 
     tags = merge(
@@ -242,6 +242,19 @@ resource "aws_lb_listener" "ln-http" {
   }
 }
 
+resource "aws_lb_listener" "ln-https" {
+  load_balancer_arn = module.alb.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = aws_iam_server_certificate.cert.arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg-http.arn
+  }
+}
+
 /****************************************************************************************************
 *  Section : Create Bastion Host
 *
@@ -302,7 +315,7 @@ module "auto_scaling_group" {
     # Launch template
     launch_template_name        = "${local.prefix}-Launch-Template"
     launch_template_description = "Launch template for RugbyClubPOI application"
-    launch_template_version = "$Latest"
+    launch_template_version = "$Latest"    
 
     security_groups = [
             module.http_security_group.security_group_id, 
@@ -312,7 +325,7 @@ module "auto_scaling_group" {
 
     image_id      = local.app_ami
     instance_type = "t2.nano"
-    user_data                   = base64encode(local.user_data)
+    user_data = base64encode(local.user_data)
     key_name = module.key_pair.key_pair_name
     enable_monitoring = true
     
@@ -348,6 +361,29 @@ resource "aws_autoscaling_policy" "scale_down" {
   policy_type            = "SimpleScaling"
 }
 
+
+/***************************************************************************************************
+*  Section : Create SNS Topic & Subscription
+*
+*  Desc: This Section is used to create the SNS Topic & Subscription. Subscription will be used *         to notify subscribers through email that the ASG policy has been triggered
+*
+* URL: https://registry.terraform.io/modules/terraform-aws-modules/sns/aws/latest
+*
+*  REVISIONS:
+*       Ver         Date          Author                 Description
+*    ---------   ----------   ---------------   ------------------------------------
+*       1.0      28/03/2024    Kieron Garvey     1. Created SNS 
+******************************************************************************************************/
+resource "aws_sns_topic" "autoscaling_notifications" {
+  name = "autoscaling-notifications"
+}
+
+resource "aws_sns_topic_subscription" "autoscaling_notifications_subscription" {
+  topic_arn = aws_sns_topic.autoscaling_notifications.arn
+  protocol  = "email"
+  endpoint  = local.email
+}
+
 /***************************************************************************************************
 *  Section : Create CloudWatch Alarms
 *
@@ -363,7 +399,7 @@ resource "aws_autoscaling_policy" "scale_down" {
 ******************************************************************************************************/
 resource "aws_cloudwatch_metric_alarm" "scale_up_alarm" {
   alarm_name          = "${local.prefix}-high-cpu-alarm"
-  alarm_description   = "Monitors CPU utilization on the EC2 instances and triggers the ASG policy to scale up"
+  alarm_description   = "Scale up triggered. CPU utilization is above 70%. Auto Scaling group: ${module.auto_scaling_group.autoscaling_group_name}"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 5
   metric_name         = "CPUUtilization"
@@ -371,18 +407,18 @@ resource "aws_cloudwatch_metric_alarm" "scale_up_alarm" {
   period              = 60
   statistic           = "Average"
   threshold           = 70
-  datapoints_to_alarm = 4
+  # datapoints_to_alarm = 4
   dimensions = {
     "AutoScalingGroupName" = module.auto_scaling_group.autoscaling_group_name
   }
   actions_enabled = true
-  alarm_actions   = [aws_autoscaling_policy.scale_up.arn]
+  alarm_actions   = [aws_autoscaling_policy.scale_up.arn, aws_sns_topic.autoscaling_notifications.arn]
 }
 
 # scale down alarm
 resource "aws_cloudwatch_metric_alarm" "scale_down_alarm" {
   alarm_name          = "${local.prefix}-low-cpu-alarm"
-  alarm_description   = "Monitors CPU utilization on the EC2 instances and triggers the ASG policy to scale down"
+  alarm_description   = "Scale down triggered. CPU utilization is below 25%. Auto Scaling group: ${module.auto_scaling_group.autoscaling_group_name}"
   comparison_operator = "LessThanOrEqualToThreshold"
   evaluation_periods  = 5
   metric_name         = "CPUUtilization"
@@ -390,10 +426,142 @@ resource "aws_cloudwatch_metric_alarm" "scale_down_alarm" {
   period              = 60
   statistic           = "Average"
   threshold           = 25
-  datapoints_to_alarm = 4
+  # datapoints_to_alarm = 4
   dimensions = {
     "AutoScalingGroupName" = module.auto_scaling_group.autoscaling_group_name
   }
   actions_enabled = true
-  alarm_actions   = [aws_autoscaling_policy.scale_down.arn]
+  alarm_actions   = [aws_autoscaling_policy.scale_down.arn, aws_sns_topic.autoscaling_notifications.arn]
 }
+
+
+
+/***************************************************************************************************
+*  Section : Create private key, csr, certificate 
+*
+*  Desc: This Section is used to create the private key, csr, certificate.
+*
+*  REVISIONS:
+*       Ver         Date          Author                 Description
+*    ---------   ----------   ---------------   ------------------------------------
+*       1.0      08/04/2024    Kieron Garvey     1. Created private key, csr, certificate
+******************************************************************************************************/
+
+/**** null_resource 
+*   URL: https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource
+*        https://www.bitslovers.com/terraform-null-resource/ 
+***/
+resource "null_resource" "generate_private_key" {
+  provisioner "local-exec" {
+    command = "openssl genrsa -out ${path.module}/webserver.key 2048"
+  }
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+}
+resource "null_resource" "generate_csr" {
+  depends_on = [null_resource.generate_private_key]
+  provisioner "local-exec" {
+    command = "openssl req -new -key ${path.module}/webserver.key -out ${path.module}/webserver.csr -subj /CN=${module.alb.dns_name}"
+  }
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+}
+
+resource "null_resource" "generate_certificate" {
+  depends_on = [null_resource.generate_csr]
+  provisioner "local-exec" {
+    command = "openssl x509 -req -days 365 -in ${path.module}/webserver.csr -signkey ${path.module}/webserver.key -out ${path.module}/webserver_self.crt"
+  }
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+}
+
+/**** local_file 
+*   URL: https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file
+***/
+data "local_file" "certificate" {
+  filename = "${path.module}/webserver_self.crt"
+  depends_on = [null_resource.generate_certificate]
+}
+
+data "local_file" "private_key" {
+  filename = "${path.module}/webserver.key"
+  depends_on = [null_resource.generate_certificate]
+}
+
+data "aws_caller_identity" "current" {}
+
+/**** create ACM certificate
+*  https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/acm_certificateresource 
+***/
+resource "aws_acm_certificate" "cert" {
+  certificate_body  = data.local_file.certificate.content
+  private_key       = data.local_file.private_key.content
+  certificate_chain = data.local_file.certificate.content
+}
+
+/*** create IAM server certificate
+*  https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_server_certificate
+***/
+resource "aws_iam_server_certificate" "cert" {
+  name_prefix      = "${local.prefix}-"
+  certificate_body = data.local_file.certificate.content
+  private_key      = data.local_file.private_key.content
+  depends_on       = [null_resource.generate_certificate]
+}
+
+
+//create target group function called tg-https for https access
+# resource "aws_lb_target_group" "tg-https" {
+#   name     = "tg-https"
+#   port     = 443
+#   protocol = "HTTPS"
+#   target_type      = "instance"
+#   vpc_id   = module.vpc.vpc_id
+
+#   # health check
+#   health_check {
+#     path                = "/"
+#     protocol            = "HTTPS"
+#     port                = "443"
+#     healthy_threshold   = 3
+#     unhealthy_threshold = 3
+#     timeout             = 4
+#     interval            = 30    
+#     matcher             = "200-399"
+#   }
+# }
+
+# /*** create iam policy to allow deletion of server certificate
+# *  https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy
+# ***/
+# resource "aws_iam_policy" "policy" {
+#   name        = "DeleteServerCertificate"
+#   description = "Allows deletion of server certificates"
+
+#   # Terraform's "jsonencode" function converts a
+#   # Terraform expression result to valid JSON syntax.
+#    policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Action = [
+#           "iam:DeleteServerCertificate",
+#         ]
+#         Effect   = "Allow"
+#         Resource = "*"
+#       },
+#     ]
+#   })
+# }
+
+# /*** create iam role policy attachment
+# * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment
+# ***/
+# resource "aws_iam_role_policy_attachment" "attach_policy" {
+#   role       = local.roles.role_arn
+#   policy_arn = aws_iam_policy.policy.arn
+# }
