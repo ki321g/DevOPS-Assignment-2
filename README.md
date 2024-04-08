@@ -31,9 +31,32 @@ Within the private subnets, application instance scaling is managed by an auto-s
 Throughout this report, we will provide detailed descriptions of all infrastructure and services used.
 [![Product Name Screen Shot][product-screenshot]](https://example.com)
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Core assignment specification
+Your demonstration should include the following:
+1. Creation and configuration of a “master” instance of a web application. You may choose any web application, ideally one that relies on a third party or backend service. Note: any backend services/databases chosen should require minimal resources, e.g. use of nano instances and small amounts of storage. At a minimum you should implement auto-scaling of the application server and discuss issues relating to the scaling of a backend if you don't implement one.
+2. Creation of a custom AMI based on your master instance, to be used by EC2 auto-scaling within your VPC infrastructure.
+3. Creation of a VPC with subnets into which your application will be deployed. Creation of suitable security groups.
+4. Creation of an elastic load balancer. Creation of a launch template based on your custom AMI. Creation of an auto-scaling group based on your launch template and linked to your load balancer.
+5. Configuration of dynamic scaling policies (using simple or step scaling) based on CloudWatch alarms to cause an increase in resources when required and also a decrease in resources when conditions return to normal. You must justify your choice of metric(s) in your report.
+6. Generation of test traffic to the load balancer – e.g. using curl/wget or a web testing tool.
+7. Show that the load is distributed across more than one web server – e.g. by viewing web server or other logs. Include screenshots and a brief explanation in your report.
+8. Use of your own script to monitor custom metrics on your servers and push these to CloudWatch. For example this could be web server
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+### Additional functionality (at least one)
+The above is the core assignment specification. In addition you are expected to explore one or more other tasks. The following are some examples of additional tasks:
+* Use one or more security services.
+Automate the basic specification, or part of it, using Python/boto.
+* Install/Integrate a database on EC2 instance(s) in private subnet(s) with an App Frontend.
+* Capture your configuration using your own customised Cloud Formation script
+* Use AWS Lambda functions in your architecture solution.
+* Implement a secure load balancer
+* Scaling based on SQS
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 ### Built With Terraform
