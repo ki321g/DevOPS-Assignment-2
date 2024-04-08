@@ -5,7 +5,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/ki321g/DevOPS-Assignment-2">
-    <img src="images/logo.png" alt="Logo" width="200" height="125">
+    <img src="images/aws_logo.png" alt="Logo" width="200" height="125">
   </a>
 
   <h3 align="center">DevOPS Assignment #2</h3>
