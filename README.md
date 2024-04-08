@@ -78,6 +78,5 @@ Project Link: [https://github.com/ki321g/DevOPS-Assignment-2](https://github.com
 Use this space to list resources you find helpful and would like to give credit to. I've included a few of my favorites to kick things off!
 
 * [Terraform Modules](https://registry.terraform.io/search/modules?namespace=terraform-aws-modules)
-search)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
