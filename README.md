@@ -69,7 +69,7 @@ Throughout this report, we will provide detailed descriptions of all infrastruct
 ### Built With Terraform
 <p align="center">
 <img src="images/terraform.png" alt="Logo" width="360" height="100">
-</p>
+</p> 
 
 Terraform is an open-source Infrastructure as Code (IaC) software tool created by HashiCorp. It allows developers to define and provision data center infrastructure using a declarative configuration language. This means you describe your desired state of infrastructure, and Terraform will figure out how to achieve that state.
 
