@@ -103,3 +103,6 @@ Use this space to list resources you find helpful and would like to give credit 
 * [Terraform Modules](https://registry.terraform.io/search/modules?namespace=terraform-aws-modules)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- MARKDOWN LINKS & IMAGES -->
+[product-screenshot]: images/screenshot.png
