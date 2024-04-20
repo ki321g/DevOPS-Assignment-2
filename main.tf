@@ -175,6 +175,50 @@ resource "local_file" "key_pair" {
     filename = "${module.key_pair.key_pair_name}.pem"
     file_permission = 600
 }
+/****************************************************************************************************
+*  Section : Create S3 Bucket for Load Balancer Logs
+*
+*  Desc: This Section is used to create the Load Balancer
+*
+*  URL: https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws/latest
+*
+*  REVISIONS:
+*       Ver         Date          Author                 Description
+*    ---------   ----------   ---------------   ------------------------------------
+*       1.0      28/03/2024    Kieron Garvey     1. Created
+******************************************************************************************************/
+module "s3_bucket_for_logs" {
+  source = "terraform-aws-modules/s3-bucket/aws"
+
+  # bucket = "${local.prefix}-S3-Bucket"
+  bucket_prefix = "${local.prefix}-alb-logs-${random_pet.this.id}"
+  acl    = "log-delivery-write"
+
+  # Allow deletion of non-empty bucket
+  force_destroy = true
+
+  versioning = {
+    enabled = true 
+  }
+
+  control_object_ownership = true
+  object_ownership         = "ObjectWriter"
+
+  attach_elb_log_delivery_policy = true  # Required for ALB logs
+  attach_lb_log_delivery_policy  = true  # Required for ALB/NLB logs
+
+  tags = merge(
+        var.default_tags,
+        {
+            ALB-Name = "${local.prefix}-S3-Bucket"
+        }
+    )  
+}
+
+# random_pet is used to generate a unique name for the S3 bucket
+resource "random_pet" "this" {
+  length = 2
+}
 
 
 /****************************************************************************************************
@@ -200,7 +244,17 @@ module "alb" {
     create_security_group = false
     
     security_groups = [module.http_security_group.security_group_id, module.egress_security_group.security_group_id]
+    access_logs = {
+      bucket  = module.s3_bucket_for_logs.s3_bucket_id
+      prefix  = "${local.prefix}-alb-logs"
+      enabled = true
+    }
 
+    connection_logs = {
+      bucket =  module.s3_bucket_for_logs.s3_bucket_id
+      prefix = "${local.prefix}-alb-connection-logs"
+      enabled = true
+    }
     tags = merge(
         var.default_tags,
         {

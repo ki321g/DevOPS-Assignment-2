@@ -1,4 +1,5 @@
 # Outputs are defined here.
+# These outputs are used to display the values of the resources created by the Terraform script.
 output "target_group_arn" {
     description = "The ARN of the target group"
     value       = aws_lb_target_group.tg-http.arn
@@ -30,7 +31,7 @@ output "instance_type" {
 
 output "iam_instance_profile_arn" {
     description = "The ARN of the IAM instance profile"
-    value       = local.roles.instance_profile_arn
+    value       = local.iam_roles.instance_profile_arn
 }
 
 output "vpc_id" {
